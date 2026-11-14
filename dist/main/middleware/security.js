@@ -594,13 +594,21 @@ exports.corsOptions = {
         try {
             const parsedOrigin = new url_1.URL(origin);
             const hostname = parsedOrigin.hostname;
-            if (hostname === 'localhost' || hostname.endsWith('.local') || isAllowedPrivateIp(hostname)) {
+            if (hostname === 'localhost' ||
+                hostname.endsWith('.local') ||
+                hostname.endsWith('.fly.dev') ||
+                hostname.endsWith('.onrender.com') ||
+                hostname.endsWith('.vercel.app') ||
+                isAllowedPrivateIp(hostname) ||
+                process.env.NODE_ENV === 'production' ||
+                Boolean(process.env.FLO_DEV_USER_DATA) ||
+                process.env.CORS_ORIGIN === '*') {
                 return callback(null, true);
             }
-            callback(new Error('Not allowed by CORS'));
+            callback(null, false);
         }
-        catch (err) {
-            callback(new Error('Invalid origin format'));
+        catch {
+            callback(null, false);
         }
     },
 };
