@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: american-pancakes-pos
+    runtime: node
+    buildCommand: npm install && cd frontend && npm install && cd .. && npm run build:frontend && npm run build
+    startCommand: node dev-server.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: FLO_DEV_USER_DATA
+        value: /data
+    disk:
+      name: pos-db-data
+      mountPath: /data
+      sizeGB: 1
