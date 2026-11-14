@@ -1,0 +1,9 @@
+id,sku,name,category,category_parent,price,description,cost,tax_category,tax_behavior,cashback_percent,tags,is_active
+,AP-CP-001,Classic Buttermilk Stack,Classic Pancakes,,149,Editable sample price,0,,,,"classic,pancakes",yes
+,AP-CP-002,Chocolate Chip Stack,Classic Pancakes,,189,Editable sample price,0,,,,"chocolate,pancakes",yes
+,AP-SP-001,Berry Cream Stack,Special Pancakes,,229,Editable sample price,0,,,,"berries,pancakes",yes
+,AP-SP-002,Peanut Butter Banana Stack,Special Pancakes,,219,Editable sample price,0,,,,"banana,pancakes",yes
+,AP-SV-001,Cheese Corn Pancake,Savoury,,199,Editable sample price,0,,,,"savoury,pancakes",yes
+,AP-DR-001,Cold Coffee,Drinks,,109,Editable sample price,0,,,,"drink,coffee",yes
+,AP-DR-002,Hot Chocolate,Drinks,,99,Editable sample price,0,,,,"drink,chocolate",yes
+

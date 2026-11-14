@@ -1,0 +1,6 @@
+group_name,addon_name,price,group_required,group_min_select,group_max_select,track_inventory,stock_quantity,low_stock_threshold
+Toppings,Chocolate Sauce,25,no,0,3,no,,
+Toppings,Maple Syrup,30,no,0,3,no,,
+Toppings,Extra Berries,40,no,0,3,no,,
+Extras,Add Ice Cream,50,no,0,1,no,,
+Extras,Extra Whipped Cream,30,no,0,1,no,,
