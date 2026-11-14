@@ -1,0 +1,10 @@
+node_modules
+frontend/node_modules
+.git
+.next
+frontend/.next
+frontend/out
+dist
+*.log
+.vscode
+tests
