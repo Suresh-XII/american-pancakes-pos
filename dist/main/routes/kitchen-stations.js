@@ -1,0 +1,270 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.kitchenStationRoutes = void 0;
+const express_1 = require("express");
+const node_crypto_1 = require("node:crypto");
+const db_1 = require("../db");
+const authorization_1 = require("../services/authorization");
+const router = (0, express_1.Router)();
+function normalizeCategoryIds(value) {
+    if (!Array.isArray(value) || value.some((id) => typeof id !== 'string' || id.trim().length === 0)) {
+        return null;
+    }
+    return [...new Set(value.map((id) => id.trim()))];
+}
+function categoryIdsExist(db, categoryIds) {
+    if (categoryIds.length === 0)
+        return true;
+    const placeholders = categoryIds.map(() => '?').join(',');
+    const rows = db.prepare(`SELECT id FROM categories WHERE deleted_at IS NULL AND is_active = 1 AND id IN (${placeholders})`).all(...categoryIds);
+    return rows.length === categoryIds.length;
+}
+function parseStoredCategoryIds(value) {
+    if (typeof value !== 'string')
+        return [];
+    try {
+        return normalizeCategoryIds(JSON.parse(value)) || [];
+    }
+    catch {
+        return [];
+    }
+}
+function removeCategoriesFromOtherStations(db, categoryIds, excludedStationId) {
+    if (categoryIds.length === 0)
+        return [];
+    const stations = db.prepare(`
+    SELECT id, name, category_ids
+    FROM kitchen_stations
+    WHERE is_active = 1 AND id != ?
+  `).all(excludedStationId);
+    const claimedIds = new Set(categoryIds);
+    const movedFrom = [];
+    const update = db.prepare('UPDATE kitchen_stations SET category_ids = ?, updated_at = ? WHERE id = ?');
+    for (const station of stations) {
+        let assignedIds = [];
+        try {
+            assignedIds = station.category_ids ? JSON.parse(station.category_ids) : [];
+        }
+        catch {
+            assignedIds = [];
+        }
+        if (!Array.isArray(assignedIds))
+            continue;
+        const normalizedAssignedIds = assignedIds.map(String);
+        const movedCategoryIds = normalizedAssignedIds.filter((categoryId) => claimedIds.has(categoryId));
+        if (movedCategoryIds.length === 0)
+            continue;
+        const remainingCategoryIds = normalizedAssignedIds.filter((categoryId) => !claimedIds.has(categoryId));
+        update.run(JSON.stringify(remainingCategoryIds), (0, db_1.now)(), station.id);
+        movedFrom.push({ station_id: station.id, station_name: station.name, category_ids: movedCategoryIds });
+    }
+    return movedFrom;
+}
+router.get('/', (0, authorization_1.requirePermission)('kitchen.stations.manage'), (req, res) => {
+    try {
+        const db = (0, db_1.getDatabase)();
+        const stations = db.prepare('SELECT * FROM kitchen_stations WHERE is_active = 1 ORDER BY sort_order, name').all();
+        res.json({ kitchenStations: stations });
+    }
+    catch (error) {
+        console.error("[API] Internal error:", error);
+        res.status(500).json({ error: "Internal server error" });
+    }
+});
+router.get('/:id', (0, authorization_1.requirePermission)('kitchen.stations.manage'), (req, res) => {
+    try {
+        const db = (0, db_1.getDatabase)();
+        const station = db.prepare('SELECT * FROM kitchen_stations WHERE id = ?').get(req.params.id);
+        if (!station) {
+            return res.status(404).json({ error: 'Kitchen station not found' });
+        }
+        const tables = db.prepare('SELECT * FROM tables WHERE kitchen_station_id = ?').all(req.params.id);
+        const users = db.prepare(`
+      SELECT u.id, u.name, u.role FROM station_users su
+      JOIN users u ON u.id = su.user_id
+      WHERE su.station_id = ?
+    `).all(req.params.id);
+        const printer = station.printer_id
+            ? db.prepare('SELECT * FROM printers WHERE id = ?').get(station.printer_id)
+            : null;
+        res.json({ kitchenStation: { ...station, tables, users, printer } });
+    }
+    catch (error) {
+        console.error("[API] Internal error:", error);
+        res.status(500).json({ error: "Internal server error" });
+    }
+});
+router.post('/', (0, authorization_1.requirePermission)('kitchen.stations.manage'), (req, res) => {
+    try {
+        const { name, description, category_ids, printer_id, printer_ip, printer_port, printer_name, sort_order } = req.body;
+        if (!name) {
+            return res.status(400).json({ error: 'Name is required' });
+        }
+        const db = (0, db_1.getDatabase)();
+        const normalizedCategoryIds = category_ids === undefined ? [] : normalizeCategoryIds(category_ids);
+        if (normalizedCategoryIds === null) {
+            return res.status(400).json({ error: 'category_ids must be an array of valid category IDs' });
+        }
+        if (!categoryIdsExist(db, normalizedCategoryIds)) {
+            return res.status(400).json({ error: 'One or more category_ids do not match an existing category' });
+        }
+        if (printer_id !== undefined && printer_id !== null) {
+            if (typeof printer_id !== 'string' || printer_id.trim().length === 0) {
+                return res.status(400).json({ error: 'printer_id must be a valid printer ID or null' });
+            }
+            const printer = db.prepare('SELECT id FROM printers WHERE id = ?').get(printer_id);
+            if (!printer)
+                return res.status(400).json({ error: 'printer_id does not match an existing printer' });
+        }
+        const id = (0, node_crypto_1.randomUUID)();
+        const createStation = db.transaction(() => {
+            const reassignedFrom = removeCategoriesFromOtherStations(db, normalizedCategoryIds, id);
+            db.prepare(`
+        INSERT INTO kitchen_stations (id, name, description, category_ids, printer_id, printer_ip, printer_port, printer_name, sort_order, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(id, name, description || null, normalizedCategoryIds.length > 0 ? JSON.stringify(normalizedCategoryIds) : null, printer_id ?? null, printer_ip || null, printer_port || 9100, printer_name || null, sort_order || 0, (0, db_1.now)(), (0, db_1.now)());
+            return reassignedFrom;
+        });
+        const reassignedFrom = createStation();
+        const station = db.prepare('SELECT * FROM kitchen_stations WHERE id = ?').get(id);
+        res.status(201).json({ kitchenStation: station, reassignedFrom });
+    }
+    catch (error) {
+        console.error("[API] Internal error:", error);
+        res.status(500).json({ error: "Internal server error" });
+    }
+});
+router.put('/:id', (0, authorization_1.requirePermission)('kitchen.stations.manage'), (req, res) => {
+    try {
+        const { name, description, category_ids, printer_id, printer_ip, printer_port, printer_name, sort_order, is_active } = req.body;
+        const db = (0, db_1.getDatabase)();
+        const station = db.prepare('SELECT * FROM kitchen_stations WHERE id = ?').get(req.params.id);
+        if (!station) {
+            return res.status(404).json({ error: 'Kitchen station not found' });
+        }
+        const normalizedCategoryIds = category_ids === undefined ? undefined : normalizeCategoryIds(category_ids);
+        if (normalizedCategoryIds === null) {
+            return res.status(400).json({ error: 'category_ids must be an array of valid category IDs' });
+        }
+        if (normalizedCategoryIds !== undefined) {
+            const previouslyAssignedIds = new Set(parseStoredCategoryIds(station.category_ids));
+            const newlyAssignedIds = normalizedCategoryIds.filter((id) => !previouslyAssignedIds.has(id));
+            // Retain historical assignments, but require newly routed categories to be active.
+            if (!categoryIdsExist(db, newlyAssignedIds)) {
+                return res.status(400).json({ error: 'One or more category_ids do not match an existing category' });
+            }
+        }
+        if (printer_id !== undefined && printer_id !== null) {
+            if (typeof printer_id !== 'string' || printer_id.trim().length === 0) {
+                return res.status(400).json({ error: 'printer_id must be a valid printer ID or null' });
+            }
+            const printer = db.prepare('SELECT id FROM printers WHERE id = ?').get(printer_id);
+            if (!printer)
+                return res.status(400).json({ error: 'printer_id does not match an existing printer' });
+        }
+        const fields = {
+            name,
+            description,
+            category_ids: normalizedCategoryIds !== undefined ? JSON.stringify(normalizedCategoryIds) : undefined,
+            printer_id,
+            printer_ip,
+            printer_port: printer_port !== undefined ? (printer_port || 9100) : undefined,
+            printer_name,
+            sort_order,
+            is_active,
+        };
+        const sets = [];
+        const params = [];
+        for (const [key, value] of Object.entries(fields)) {
+            if (value !== undefined) {
+                sets.push(`${key} = ?`);
+                params.push(value);
+            }
+        }
+        sets.push('updated_at = ?');
+        params.push((0, db_1.now)(), req.params.id);
+        const updateStation = db.transaction(() => {
+            const reassignedFrom = normalizedCategoryIds
+                ? removeCategoriesFromOtherStations(db, normalizedCategoryIds, String(req.params.id))
+                : [];
+            db.prepare(`UPDATE kitchen_stations SET ${sets.join(', ')} WHERE id = ?`).run(...params);
+            return reassignedFrom;
+        });
+        const reassignedFrom = updateStation();
+        const updated = db.prepare('SELECT * FROM kitchen_stations WHERE id = ?').get(req.params.id);
+        res.json({ kitchenStation: updated, reassignedFrom });
+    }
+    catch (error) {
+        console.error("[API] Internal error:", error);
+        res.status(500).json({ error: "Internal server error" });
+    }
+});
+// PUT /api/kitchen-stations/:id/users — replace the full set of staff logins assigned to this station
+router.put('/:id/users', (0, authorization_1.requirePermission)('kitchen.stations.manage'), (req, res) => {
+    try {
+        const { user_ids } = req.body;
+        if (!Array.isArray(user_ids)) {
+            return res.status(400).json({ error: 'user_ids must be an array' });
+        }
+        if (user_ids.length > 100 || user_ids.some((id) => typeof id !== 'string' || id.length === 0 || id.length > 128)) {
+            return res.status(400).json({ error: 'user_ids must contain at most 100 valid user IDs' });
+        }
+        const db = (0, db_1.getDatabase)();
+        const station = db.prepare('SELECT id FROM kitchen_stations WHERE id = ?').get(req.params.id);
+        if (!station) {
+            return res.status(404).json({ error: 'Kitchen station not found' });
+        }
+        if (user_ids.length > 0) {
+            const placeholders = user_ids.map(() => '?').join(',');
+            const found = db.prepare(`SELECT id FROM users WHERE role = 'chef' AND is_active = 1 AND id IN (${placeholders})`).all(...user_ids);
+            if (found.length !== user_ids.length) {
+                return res.status(400).json({ error: 'Kitchen stations can only be assigned to active chef accounts' });
+            }
+        }
+        const previousUserIds = db.prepare('SELECT user_id FROM station_users WHERE station_id = ?').all(req.params.id).map((row) => row.user_id);
+        const applyAssignments = db.transaction((ids) => {
+            const affectedUserIds = [...new Set([...previousUserIds, ...ids])];
+            if (affectedUserIds.length > 0) {
+                const placeholders = affectedUserIds.map(() => '?').join(',');
+                db.prepare(`UPDATE users SET station_assignments_configured = 1 WHERE id IN (${placeholders})`).run(...affectedUserIds);
+            }
+            db.prepare('DELETE FROM station_users WHERE station_id = ?').run(req.params.id);
+            const insert = db.prepare('INSERT INTO station_users (user_id, station_id, created_at) VALUES (?, ?, ?)');
+            for (const userId of ids) {
+                insert.run(userId, req.params.id, (0, db_1.now)());
+            }
+        });
+        applyAssignments(user_ids);
+        const users = db.prepare(`
+      SELECT u.id, u.name, u.role FROM station_users su
+      JOIN users u ON u.id = su.user_id
+      WHERE su.station_id = ?
+    `).all(req.params.id);
+        res.json({ users });
+    }
+    catch (error) {
+        console.error("[API] Internal error:", error);
+        res.status(500).json({ error: "Internal server error" });
+    }
+});
+router.delete('/:id', (0, authorization_1.requirePermission)('kitchen.stations.manage'), (req, res) => {
+    try {
+        const db = (0, db_1.getDatabase)();
+        const station = db.prepare('SELECT * FROM kitchen_stations WHERE id = ?').get(req.params.id);
+        if (!station) {
+            return res.status(404).json({ error: 'Kitchen station not found' });
+        }
+        const assignedTables = db.prepare('SELECT * FROM tables WHERE kitchen_station_id = ?').all(req.params.id);
+        if (assignedTables.length > 0) {
+            return res.status(400).json({ error: 'Cannot delete station with assigned tables' });
+        }
+        db.prepare('UPDATE kitchen_stations SET is_active = 0, updated_at = ? WHERE id = ?').run((0, db_1.now)(), req.params.id);
+        res.json({ message: 'Kitchen station deleted' });
+    }
+    catch (error) {
+        console.error("[API] Internal error:", error);
+        res.status(500).json({ error: "Internal server error" });
+    }
+});
+exports.kitchenStationRoutes = router;
+//# sourceMappingURL=kitchen-stations.js.map

@@ -198,6 +198,15 @@ function upsertSettings(
 }
 
 function isLocalSetupRequest(req: Request): boolean {
+  // Allow remote initial setup in headless / web server mode or when explicitly enabled
+  if (
+    process.env.FLO_ALLOW_REMOTE_SETUP === '1' ||
+    process.env.FLO_DEV_USER_DATA ||
+    process.env.NODE_ENV === 'production' ||
+    !process.versions.electron
+  ) {
+    return true;
+  }
   const remoteAddress = req.socket.remoteAddress || req.ip || '';
   return LOCAL_SETUP_HOSTS.has(remoteAddress) || remoteAddress.startsWith('127.');
 }

@@ -195,6 +195,7 @@ export function startServer(): Promise<void> {
   return new Promise((resolve, reject) => {
     startReject = reject;
     app = express();
+    app.set('trust proxy', 1);
     app.disable('x-powered-by');
 
     // ── Security Headers ───────────────────────────────────────────────

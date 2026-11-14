@@ -1,0 +1,1 @@
+{"version":3,"file":"url-allowlist.d.ts","sourceRoot":"","sources":["../../../main/security/url-allowlist.ts"],"names":[],"mappings":"AAKA,gFAAgF;AAChF,wBAAgB,uBAAuB,CAAC,MAAM,EAAE,MAAM,EAAE,IAAI,EAAE,MAAM,EAAE,OAAO,CAAC,EAAE,MAAM,GAAG,OAAO,CAiB/F;AAED,wBAAgB,iBAAiB,CAAC,MAAM,EAAE,MAAM,GAAG,OAAO,CAOzD;AAED,8EAA8E;AAC9E,wBAAgB,sBAAsB,CAAC,MAAM,EAAE,MAAM,GAAG,OAAO,CAY9D"}

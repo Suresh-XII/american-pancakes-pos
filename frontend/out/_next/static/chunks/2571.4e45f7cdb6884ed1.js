@@ -1,0 +1,1 @@
+"use strict";(self.webpackChunk_N_E=self.webpackChunk_N_E||[]).push([[2571],{92571:(e,a,l)=>{l.d(a,{A:()=>c});var s=l(21425);let d={name:"loader-circle",size:24,node:[["path",{d:"M21 12a9 9 0 1 1-6.219-8.56",key:"13zald"}]],aliases:["loader-2"]};d.node;let c=(0,s.A)(d)}}]);

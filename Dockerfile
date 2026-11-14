@@ -6,6 +6,7 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=8080
 ENV FLO_DEV_USER_DATA=/data
+ENV FLO_ALLOW_REMOTE_SETUP=1
 
 # Install essential native build dependencies for better-sqlite3 compilation on Linux
 RUN apt-get update -qq && \
