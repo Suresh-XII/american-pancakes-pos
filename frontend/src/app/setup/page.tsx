@@ -289,8 +289,8 @@ export default function SetupPage() {
         ...countryPayload,
       });
       completeSetup();
-    } catch (err: any) {
-      const serverMessage = err?.response?.data?.error || err?.message;
+    } catch (err: unknown) {
+      const serverMessage = (err as { response?: { data?: { error?: string } } })?.response?.data?.error;
       toast.error(serverMessage || t('errorGeneric'));
     } finally {
       setLoading(false);

@@ -212,7 +212,6 @@ function startServer() {
     return new Promise((resolve, reject) => {
         startReject = reject;
         app = (0, express_1.default)();
-        app.set('trust proxy', 1);
         app.disable('x-powered-by');
         // ── Security Headers ───────────────────────────────────────────────
         // Blocks sniffing, framing, crawlers, referrer leaks, and hardware permissions

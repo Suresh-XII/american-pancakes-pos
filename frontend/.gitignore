@@ -15,7 +15,7 @@
 
 # next.js
 /.next/
-# /out/ (tracked for containerized web builds)
+/out/
 
 # production
 /build

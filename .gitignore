@@ -1,6 +1,6 @@
 node_modules
 node_modules/
-# dist/ (tracked for Docker and cloud deployments)
+dist/
 release/
 mas-build-output/
 *.db

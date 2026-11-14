@@ -64,6 +64,11 @@ Module._load = function (request, parent, isMain) {
       Menu: { buildFromTemplate: () => ({}), setApplicationMenu: () => {} },
       Tray: class {},
       nativeImage: { createFromPath: () => ({ resize: () => ({}) }) },
+      safeStorage: {
+        isEncryptionAvailable: () => false,
+        encryptString: (str) => Buffer.from(str),
+        decryptString: (buf) => buf.toString(),
+      },
     };
   }
   return originalLoad.call(this, request, parent, isMain);

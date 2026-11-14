@@ -150,11 +150,10 @@ function upsertSettings(db, entries) {
     }
 }
 function isLocalSetupRequest(req) {
-    // Allow remote initial setup in headless / web server mode or when explicitly enabled
     if (process.env.FLO_ALLOW_REMOTE_SETUP === '1' ||
-        process.env.FLO_DEV_USER_DATA ||
+        process.env.ALLOW_REMOTE_SETUP === '1' ||
         process.env.NODE_ENV === 'production' ||
-        !process.versions.electron) {
+        Boolean(process.env.FLO_DEV_USER_DATA)) {
         return true;
     }
     const remoteAddress = req.socket.remoteAddress || req.ip || '';
