@@ -1,42 +1,59 @@
-FROM node:22-bookworm-slim AS builder
+# syntax = docker/dockerfile:1
+
+ARG NODE_VERSION=22
+FROM node:${NODE_VERSION}-bookworm-slim AS base
+
+LABEL fly_launch_runtime="Node.js"
 
 WORKDIR /app
 
-# Install root dependencies
+ENV NODE_ENV="production"
+ENV PORT=8080
+ENV FLO_DEV_USER_DATA=/data
+
+# Build stage
+FROM base AS build
+
+# Install build dependencies
+RUN apt-get update -qq && \
+    apt-get install --no-install-recommends -y build-essential pkg-config python3 ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
+
+# Copy package manifests for root and frontend
 COPY package*.json ./
-RUN npm install
-
-# Install frontend dependencies
 COPY frontend/package*.json ./frontend/
-RUN cd frontend && npm install
 
-# Copy application source
+# Install dependencies with engine-strict disabled to prevent lint-staged node version mismatch
+RUN npm install --engine-strict=false --ignore-scripts
+RUN cd frontend && npm install --engine-strict=false
+
+# Copy full application code
 COPY . .
 
 # Build frontend and backend
 ENV NEXT_BUILD_MODE=desktop
 RUN npm run build:frontend && npm run build
 
-# Production runtime
-FROM node:22-bookworm-slim AS runner
+# Final runtime image
+FROM base
 
 WORKDIR /app
 
-ENV NODE_ENV=production
-ENV PORT=3001
-ENV FLO_DEV_USER_DATA=/data
-
+# Ensure SQLite storage mount exists
 RUN mkdir -p /data
+VOLUME /data
 
-COPY --from=builder /app/package*.json ./
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/frontend/out ./frontend/out
-COPY --from=builder /app/dev-server.js ./dev-server.js
-COPY --from=builder /app/main ./main
-COPY --from=builder /app/shared ./shared
-COPY --from=builder /app/starter-data ./starter-data
+# Copy built application and runtime dependencies
+COPY --from=build /app/package*.json ./
+COPY --from=build /app/node_modules ./node_modules
+COPY --from=build /app/dist ./dist
+COPY --from=build /app/frontend/out ./frontend/out
+COPY --from=build /app/dev-server.js ./dev-server.js
+COPY --from=build /app/main ./main
+COPY --from=build /app/shared ./shared
+COPY --from=build /app/starter-data ./starter-data
 
-EXPOSE 3001
+EXPOSE 8080
 
-CMD ["node", "dev-server.js"]
+# Start the headless web/Express POS server
+CMD [ "node", "dev-server.js" ]
