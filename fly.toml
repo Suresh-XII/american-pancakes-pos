@@ -1,5 +1,5 @@
 app = 'american-pancakes-pos'
-primary_region = 'ams'
+primary_region = 'sin'
 
 [build]
 
@@ -9,7 +9,7 @@ primary_region = 'ams'
   FLO_DEV_USER_DATA = '/data'
 
 [[mounts]]
-  source = 'data'
+  source = 'pos_data'
   destination = '/data'
   auto_extend_size_threshold = 80
   auto_extend_size_increment = '1GB'
